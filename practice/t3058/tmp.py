@@ -29,12 +29,9 @@ test_dir = '/opt/ml/input/data/eval'
 class MyModel(nn.Module):
     def __init__(self, num_classes: int = 1000):
         super(MyModel, self).__init__()
-        self.model = models.resnet152()
-        self.model.conv1 = nn.Conv2d(3, 64, kernel_size=(7,7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.model = models.resnet152(pretrained=True)
         self.model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
         torch.nn.init.xavier_uniform_(self.model.fc.weight)
-        stdv = 1. / math.sqrt(self.model.fc.weight.size(1))
-        self.model.fc.bias.data.uniform_(-stdv,stdv)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.model(x)
@@ -64,11 +61,11 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
             if gender[0]=='F':
                 gender = 1
             else:
-                gender = 2
+                gender = 0
 
-            if 'incorrect' in tmp:
+            if 'incorrect' in mask:
                 mask = 1
-            elif 'normal' in tmp:
+            elif 'normal' in mask:
                 mask = 2
             else:
                 mask = 0
@@ -98,21 +95,6 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         train_set, val_set = random_split(self, [n_train, n_val])
         return train_set, val_set
 
-
-class TestDataset(Dataset):
-    def __init__(self, img_paths, transform):
-        self.img_paths = img_paths
-        self.transform = transform
-
-    def __getitem__(self, index):
-        image = Image.open(self.img_paths[index])
-
-        if self.transform:
-            image = self.transform(image)
-        return image
-
-    def __len__(self):
-        return len(self.img_paths)
 
 transform = transforms.Compose([
     Resize((512, 384), Image.BILINEAR),
@@ -150,16 +132,16 @@ if __name__ == '__main__':
 
     train_loader = DataLoader(train_data, shuffle=True,batch_size=args.batch_size)
 
-    val_loader = DataLoader(train_data, shuffle=True,batch_size=args.batch_size)
+    val_loader = DataLoader(val_set, shuffle=True,batch_size=args.batch_size)
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
     model = MyModel().to(device)
-
+    
     loss_fn = torch.nn.CrossEntropyLoss()
     optm = optim.Adam(model.parameters(), lr=1e-3)
-
+    
     best_val_acc = 0
     best_val_loss = np.inf
     for epoch in range(args.epochs):
