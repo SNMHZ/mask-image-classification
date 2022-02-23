@@ -11,11 +11,16 @@ from torchvision import transforms
 from torchvision.transforms import Resize, ToTensor, Normalize
 
 
+from torch.utils.data import Dataset, Subset, random_split
+
+
 from pandas import DataFrame
 import torch.optim as optim
 import torchvision.models as models
 import math
 import argparse
+import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 # 테스트 데이터셋 폴더 경로를 지정해주세요.
 train_dir = '/opt/ml/input/data/train'
 test_dir = '/opt/ml/input/data/eval'
@@ -24,33 +29,25 @@ test_dir = '/opt/ml/input/data/eval'
 class MyModel(nn.Module):
     def __init__(self, num_classes: int = 1000):
         super(MyModel, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-        )
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = nn.Sequential(
-            nn.Dropout(),
-            nn.Linear(64, 32),
-            nn.ReLU(inplace=True),
-            nn.Linear(32, num_classes),
-        )
+        self.model = models.resnet152()
+        self.model.conv1 = nn.Conv2d(3, 64, kernel_size=(7,7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
+        torch.nn.init.xavier_uniform_(self.model.fc.weight)
+        stdv = 1. / math.sqrt(self.model.fc.weight.size(1))
+        self.model.fc.bias.data.uniform_(-stdv,stdv)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.classifier(x)
+        x = self.model(x)
         return x
 
 
 from glob import glob
 class TrainDataset(Dataset):    #Dataset만 받아야 한다.
-    def __init__(self, transform=''):
+    def __init__(self, transform='', val_ratio=0.2):
         self.transform = transform
         self.X = glob('/opt/ml/input/data/train/images/*/*')
         self.Y = []
+        self.val_ratio = val_ratio
         
         for i,img_dir in enumerate(self.X):
             tmp = img_dir.split("/")
@@ -89,6 +86,17 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
     def __len__(self):
         return len(self.X)
 
+    def split_dataset(self):
+        """
+        데이터셋을 train 과 val 로 나눕니다,
+        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여
+        torch.utils.data.Subset 클래스 둘로 나눕니다.
+        구현이 어렵지 않으니 구글링 혹은 IDE (e.g. pycharm) 의 navigation 기능을 통해 코드를 한 번 읽어보는 것을 추천드립니다^^
+        """
+        n_val = int(len(self) * self.val_ratio)
+        n_train = len(self) - n_val
+        train_set, val_set = random_split(self, [n_train, n_val])
+        return train_set, val_set
 
 
 class TestDataset(Dataset):
@@ -129,29 +137,31 @@ if __name__ == '__main__':
     parser.add_argument('--lr_decay_step', type=int, default=20, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
+    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
     args = parser.parse_args()
+    save_dir = os.path.join(args.model_dir, args.name)
 
-    train_data = TrainDataset(transform=transform)
+
+    logger = SummaryWriter(log_dir=os.path.join(save_dir, args.name))
+
+    train_data, val_set = TrainDataset(transform=transform).split_dataset()
     # x_data = TrainDataset()
 
 
     train_loader = DataLoader(train_data, shuffle=True,batch_size=args.batch_size)
 
+    val_loader = DataLoader(train_data, shuffle=True,batch_size=args.batch_size)
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
-    model = models.resnet152()
-    model.conv1 = nn.Conv2d(3, 64, kernel_size=(7,7), stride=(2, 2), padding=(3, 3), bias=False)
-    model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
-    torch.nn.init.xavier_uniform_(model.fc.weight)
-    stdv = 1. / math.sqrt(model.fc.weight.size(1))
-    model.fc.bias.data.uniform_(-stdv,stdv)
-    model = model.to(device)
+    model = MyModel().to(device)
 
     loss_fn = torch.nn.CrossEntropyLoss()
     optm = optim.Adam(model.parameters(), lr=1e-3)
 
+    best_val_acc = 0
+    best_val_loss = np.inf
     for epoch in range(args.epochs):
         loss_value = 0
         matches = 0
@@ -180,3 +190,44 @@ if __name__ == '__main__':
 
                 loss_value = 0
                 matches = 0
+
+
+
+
+
+        with torch.no_grad():
+            print("Calculating validation results...")
+            model.eval()
+            val_loss_items = []
+            val_acc_items = []
+            for val_batch in val_loader:
+                inputs, labels = val_batch
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                outs = model(inputs)
+                preds = torch.argmax(outs, dim=-1)
+
+                loss_item = loss_fn(outs, labels).item()
+                acc_item = (labels == preds).sum().item()
+                val_loss_items.append(loss_item)
+                val_acc_items.append(acc_item)
+
+
+            val_loss = np.sum(val_loss_items) / len(val_loader)
+            val_acc = np.sum(val_acc_items) / len(val_set)
+            best_val_loss = min(best_val_loss, val_loss)
+            if val_acc > best_val_acc:
+                print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
+                torch.save(model.state_dict(), f"{save_dir}/best.pth")
+                best_val_acc = val_acc
+            torch.save(model.state_dict(), f"{save_dir}/last.pth")
+            print(
+                f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
+                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
+            )
+            logger.add_scalar("Val/loss", val_loss, epoch)
+            logger.add_scalar("Val/accuracy", val_acc, epoch)
+            
+            
+            
