@@ -3,9 +3,9 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from torch.utils.data import DataLoader
+from torch.optim import Optimizer
 
-
-def train_one_epoch(model: nn.Module, optimizer, data_loader: DataLoader, device, epoch):
+def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader: DataLoader, device, epoch):
     model.train()
     model.zero_grad()
     tqdm_dataloader = tqdm(data_loader)
