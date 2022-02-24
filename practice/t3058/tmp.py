@@ -27,10 +27,10 @@ test_dir = '/opt/ml/input/data/eval'
 
 
 class MyModel(nn.Module):
-    def __init__(self, num_classes: int = 1000):
+    def __init__(self, num_classes: int = 18):
         super(MyModel, self).__init__()
         self.model = models.resnet152(pretrained=True)
-        self.model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
+        self.model.fc = torch.nn.Linear(in_features=2048, out_features=num_classes, bias=True)
         torch.nn.init.xavier_uniform_(self.model.fc.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -45,6 +45,7 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         self.X = glob('/opt/ml/input/data/train/images/*/*')
         self.Y = []
         self.val_ratio = val_ratio
+        self.num_classes = 18
         
         for i,img_dir in enumerate(self.X):
             tmp = img_dir.split("/")
@@ -58,7 +59,7 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
             else:
                 age = 0
 
-            if gender[0]=='F':
+            if gender[0]=='f':
                 gender = 1
             else:
                 gender = 0

@@ -105,6 +105,79 @@ class AgeLabels(int, Enum):
         else:
             return cls.OLD
 
+from glob import glob
+class TrainDataset(Dataset):    #Dataset만 받아야 한다.
+    def __init__(self, transform='', val_ratio=0.2, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
+        self.transform = transform
+        self.X = glob('/opt/ml/input/data/train/images/*/*')
+        self.Y = []
+        self.val_ratio = val_ratio
+        self.mean = mean
+        self.std = std
+        self.num_classes = 18
+        
+        for i,img_dir in enumerate(self.X):
+            tmp = img_dir.split("/")
+            if tmp[-1][0]=='.': continue
+            mask,gender_age = tmp[-1],tmp[-2].split("_")
+            gender,age = gender_age[1],int(gender_age[-1])
+
+            if age<30:
+                age = 0
+            elif 30<=age<60:
+                age = 1
+            else:
+                age = 2
+
+            if gender[0]=='m':
+                gender = 0
+            else:
+                gender = 1
+
+            if mask[0] == 'i':
+                mask = 1
+            elif mask[0] == 'n':
+                mask = 2
+            else:
+                mask = 0
+            
+            self.Y.append(6*mask+3*gender+age)
+
+
+    def __getitem__(self, index):
+        image = Image.open(self.X[index])
+
+        if self.transform:
+            image = self.transform(image)
+        return image, self.Y[index]
+
+    def __len__(self):
+        return len(self.X)
+
+    def split_dataset(self):
+        """
+        데이터셋을 train 과 val 로 나눕니다,
+        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여
+        torch.utils.data.Subset 클래스 둘로 나눕니다.
+        구현이 어렵지 않으니 구글링 혹은 IDE (e.g. pycharm) 의 navigation 기능을 통해 코드를 한 번 읽어보는 것을 추천드립니다^^
+        """
+        n_val = int(len(self) * self.val_ratio)
+        n_train = len(self) - n_val
+        train_set, val_set = random_split(self, [n_train, n_val])
+        return train_set, val_set
+    
+    def set_transform(self, transform):
+        self.transform = transform
+        
+    @staticmethod
+    def denormalize_image(image, mean, std):
+        img_cp = image.copy()
+        img_cp *= std
+        img_cp += mean
+        img_cp *= 255.0
+        img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
+        return img_cp
+
 
 class MaskBaseDataset(Dataset):
     num_classes = 3 * 2 * 3
