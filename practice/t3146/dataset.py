@@ -1,6 +1,5 @@
 from PIL import Image
 from torchvision import transforms
-from torchvision.transforms import Resize, ToTensor, Normalize
 
 from torch.utils.data import Dataset
 
@@ -44,7 +43,8 @@ class TrainDataset_01(Dataset):
     def __len__(self):
         return len(self.img_paths)
 
-## TODO
+# Mission
+
 # 2. 강의때 보여드렸던 torchvision에 내장된 여러 Augmentation 함수와 albumentation 라이브러리의 여러 transform 기법을 적용해보세요. 
 # 적용해 보신 뒤에 실제로 어떻게 변환되어 나오는지 확인해보세요. 
 # 아마 plot형태로 그려서 확인해야 할거에요. 
