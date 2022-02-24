@@ -32,7 +32,7 @@ def inference(data_dir, model_dir, output_dir, args):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
-    num_classes = MaskBaseDataset.num_classes  # 18
+    num_classes = 18  # 18
     model = load_model(model_dir, num_classes, device).to(device)
     model.eval()
 
@@ -45,7 +45,7 @@ def inference(data_dir, model_dir, output_dir, args):
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size,
-        num_workers=8,
+        num_workers=2,
         shuffle=False,
         pin_memory=use_cuda,
         drop_last=False,

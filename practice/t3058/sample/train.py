@@ -21,6 +21,7 @@ from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import Resize,ToTensor, Normalize
 
+
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -98,7 +99,7 @@ def train(data_dir, model_dir, args):
     transform = transforms.Compose([
     Resize((512, 384), Image.BILINEAR),
     ToTensor(),
-    Normalize(mean=(0.5, 0.5, 0.5), std=(0.2, 0.2, 0.2)),
+    Normalize(mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)),
     ])
 
     dataset.set_transform(transform)
@@ -110,7 +111,7 @@ def train(data_dir, model_dir, args):
         train_set,
         batch_size=args.batch_size,
         num_workers=multiprocessing.cpu_count()//2,
-        shuffle=True,
+        shuffle=False,
         pin_memory=use_cuda,
         drop_last=True,
     )
@@ -158,14 +159,17 @@ def train(data_dir, model_dir, args):
             inputs = inputs.to(device)
             labels = labels.to(device)
 
-            optimizer.zero_grad()
-
             outs = model(inputs)
             preds = torch.argmax(outs, dim=-1)
             loss = criterion(outs, labels)
 
             loss.backward()
-            optimizer.step()
+            
+            
+            if idx%2==0:
+                optimizer.step()
+                optimizer.zero_grad()
+
 
             loss_value += loss.item()
             matches += (preds == labels).sum().item()
@@ -237,7 +241,7 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
-    parser.add_argument('--epochs', type=int, default=2, help='number of epochs to train (default: 1)')
+    parser.add_argument('--epochs', type=int, default=4, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='TrainDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[512, 384], help='resize size for image when training')
@@ -246,7 +250,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='MyModel', help='model type (default: MyModel)')
     parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer type (default: SGD)')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
-    parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
+    parser.add_argument('--val_ratio', type=float, default=0.1, help='ratio for validaton (default: 0.2)')
     parser.add_argument('--criterion', type=str, default='cross_entropy', help='criterion type (default: cross_entropy)')
     parser.add_argument('--lr_decay_step', type=int, default=10, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')

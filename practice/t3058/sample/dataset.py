@@ -10,7 +10,7 @@ from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision import transforms
 from torchvision.transforms import *
-
+import albumentations as A
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
     ".PNG", ".ppm", ".PPM", ".bmp", ".BMP",
@@ -109,16 +109,18 @@ from glob import glob
 class TrainDataset(Dataset):    #Dataset만 받아야 한다.
     def __init__(self, transform='', val_ratio=0.2, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.transform = transform
-        self.X = glob('/opt/ml/input/data/train/images/*/*')
+        XX = glob('/opt/ml/input/data/train/images/*/*')
+        self.X = []
         self.Y = []
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.num_classes = 18
         
-        for i,img_dir in enumerate(self.X):
+        for i,img_dir in enumerate(XX):
             tmp = img_dir.split("/")
             if tmp[-1][0]=='.': continue
+            self.X.append(img_dir)
             mask,gender_age = tmp[-1],tmp[-2].split("_")
             gender,age = gender_age[1],int(gender_age[-1])
 
@@ -385,3 +387,7 @@ class TestDataset(Dataset):
 
     def __len__(self):
         return len(self.img_paths)
+    
+    def randAugment(self,N,M):
+        selected = np.random.choice(self.transforms,N)
+        return [(s,M) for s in selected]
