@@ -10,7 +10,9 @@ from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision import transforms
 from torchvision.transforms import *
-import albumentations as A
+from random import randint
+# import albumentations as A
+
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
     ".PNG", ".ppm", ".PPM", ".bmp", ".BMP",
@@ -116,6 +118,13 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         self.mean = mean
         self.std = std
         self.num_classes = 18
+        self.transform2 = [transforms.Grayscale(3),
+            transforms.ColorJitter(brightness=0.5, hue=0.3),
+            transforms.RandomPerspective(distortion_scale=0.4,p=1.0),
+            RandomRotation(degrees=40), 
+            RandomCrop(64,48),
+            ColorJitter(0.1, 0.1, 0.1, 0.1)
+        ]
         
         for i,img_dir in enumerate(XX):
             tmp = img_dir.split("/")
@@ -143,14 +152,38 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
             else:
                 mask = 0
             
-            self.Y.append(6*mask+3*gender+age)
+            label = 6*mask+3*gender+age
+            self.Y.append(label)
+            
+            if label in [2,7,13]:
+                for _ in range(5):
+                    self.X.append(img_dir)
+                    self.Y.append(label)
+            elif label in [5,6,12]:
+                for _ in range(5):
+                    self.X.append(img_dir)
+                    self.Y.append(label)
+            elif label in [4,8,11,17]:
+                for _ in range(20):
+                    self.X.append(img_dir)
+                    self.Y.append(label)
+            elif label in [15,16]:
+                for _ in range(2):
+                    self.X.append(img_dir)
+                    self.Y.append(label)
+                    
+                
 
 
     def __getitem__(self, index):
         image = Image.open(self.X[index])
 
         if self.transform:
+            if self.Y[index] not in [0,1,3,9,10,14]:
+                tmp = self.randAugment(randint(1,len(self.transform2)-1))
+                image = tmp(image)
             image = self.transform(image)
+            
         return image, self.Y[index]
 
     def __len__(self):
@@ -180,6 +213,10 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
         return img_cp
 
+    def randAugment(self,N):
+        sample = np.random.choice(self.transform2, size = N)
+        c= transforms.Compose(list(sample))
+        return c
 
 class MaskBaseDataset(Dataset):
     num_classes = 3 * 2 * 3
@@ -388,6 +425,3 @@ class TestDataset(Dataset):
     def __len__(self):
         return len(self.img_paths)
     
-    def randAugment(self,N,M):
-        selected = np.random.choice(self.transforms,N)
-        return [(s,M) for s in selected]

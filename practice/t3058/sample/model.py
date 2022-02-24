@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import timm
 
 class BaseModel(nn.Module):
     def __init__(self, num_classes):
@@ -44,9 +45,9 @@ class MyModel(nn.Module):
         2. 나만의 모델 아키텍쳐를 디자인 해봅니다.
         3. 모델의 output_dimension 은 num_classes 로 설정해주세요.
         """
-        models = torchvision.models.resnet152
-        self.model = models(pretrained=True)
-        self.model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
+        # models = torchvision.models.resnet152
+        self.model = torchvision.models.resnet34(pretrained=True)
+        self.model.fc = torch.nn.Linear(in_features=512, out_features=18, bias=True)
         torch.nn.init.xavier_uniform_(self.model.fc.weight)
 
     def forward(self, x):
