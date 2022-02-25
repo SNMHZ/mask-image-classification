@@ -118,18 +118,30 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         self.mean = mean
         self.std = std
         self.num_classes = 18
+        self.resize = [512,384]
+        self.cnt = 0
+        self.transform = transforms.Compose([
+            Resize(self.resize, Image.BILINEAR),
+            ToTensor(),
+            Normalize(mean=self.mean, std=self.std),
+        ])
+
         self.transform2 = [transforms.Grayscale(3),
+            ColorJitter(0.1, 0.1, 0.1, 0.1),
+            transforms.Pad(randint(4,50)),
+            transforms.GaussianBlur(kernel_size=(5,9), sigma=(0.1,5)),
+            transforms.RandomHorizontalFlip(p=0.5),
             transforms.ColorJitter(brightness=0.5, hue=0.3),
             transforms.RandomPerspective(distortion_scale=0.4,p=1.0),
             RandomRotation(degrees=40), 
-            RandomCrop(64,48),
-            ColorJitter(0.1, 0.1, 0.1, 0.1)
+            ColorJitter(0.2, 0.4, 0.35, 0.1),
+            AddGaussianNoise()
         ]
         
         for i,img_dir in enumerate(XX):
             tmp = img_dir.split("/")
             if tmp[-1][0]=='.': continue
-            self.X.append(img_dir)
+            self.X.append([img_dir,i])
             mask,gender_age = tmp[-1],tmp[-2].split("_")
             gender,age = gender_age[1],int(gender_age[-1])
 
@@ -154,34 +166,35 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
             
             label = 6*mask+3*gender+age
             self.Y.append(label)
+
             
-            if label in [2,7,13]:
-                for _ in range(5):
-                    self.X.append(img_dir)
-                    self.Y.append(label)
-            elif label in [5,6,12]:
-                for _ in range(5):
-                    self.X.append(img_dir)
-                    self.Y.append(label)
-            elif label in [4,8,11,17]:
-                for _ in range(20):
-                    self.X.append(img_dir)
-                    self.Y.append(label)
-            elif label in [15,16]:
-                for _ in range(2):
-                    self.X.append(img_dir)
-                    self.Y.append(label)
+            # if label in [2,7,13]:
+            #     for j in range(1,6):
+            #         self.X.append([img_dir,i+j])
+            #         self.Y.append(label)
+            # elif label in [5,6,12]:
+            #     for j in range(1,5):
+            #         self.X.append([img_dir,i+j])
+            #         self.Y.append(label)
+            # elif label in [4,8,11,17]:
+            #     for j in range(1,21):
+            #         self.X.append([img_dir,i+j])
+            #         self.Y.append(label)
+            # elif label in [15,16]:
+            #     for j in range(1,3):
+            #         self.X.append([img_dir,i+j])
+            #         self.Y.append(label)
                     
                 
 
 
     def __getitem__(self, index):
-        image = Image.open(self.X[index])
-
+        
+        image = Image.open(self.X[index][0])
         if self.transform:
-            if self.Y[index] not in [0,1,3,9,10,14]:
-                tmp = self.randAugment(randint(1,len(self.transform2)-1))
-                image = tmp(image)
+        # if self.Y[index] not in [0,1,3,9,10,14]:
+            tmp = self.randAugment(randint(index%3,len(self.transform2)))
+            image = tmp(image)
             image = self.transform(image)
             
         return image, self.Y[index]
@@ -203,6 +216,8 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
     
     def set_transform(self, transform):
         self.transform = transform
+    def set_resize(self, resize):
+        self.resize = resize
         
     @staticmethod
     def denormalize_image(image, mean, std):
@@ -214,8 +229,9 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         return img_cp
 
     def randAugment(self,N):
-        sample = np.random.choice(self.transform2, size = N)
-        c= transforms.Compose(list(sample))
+        sample = list(np.random.choice(self.transform2, size = N))
+        random.shuffle(sample)
+        c= transforms.Compose(sample)
         return c
 
 class MaskBaseDataset(Dataset):
