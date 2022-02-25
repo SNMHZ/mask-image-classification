@@ -7,7 +7,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import TestDataset, MaskBaseDataset
-import albumentations as A
 
 
 def load_model(saved_model, num_classes, device):
