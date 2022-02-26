@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, Subset, random_split
 from torchvision import transforms
 from torchvision.transforms import *
 from random import randint
+import albumentations as A
 # import albumentations as A
 
 IMG_EXTENSIONS = [
@@ -263,6 +264,20 @@ class MaskBaseDataset(Dataset):
         self.calc_statistics()
 
         self.transform2 = [
+            A.Blur(blur_limit=6, always_apply=True),
+            A.CLAHE(clip_limit = 3,always_apply=True),
+            A.ColorJitter(0.7,0.4,0.1,0,always_apply=True),
+            A.Equalize(always_apply=True),
+            A.FancyPCA(alpha = 1,always_apply=True),
+            A.GaussNoise(var_limit = 300,always_apply=True),
+            A.MedianBlur(blur_limit=3,always_apply=True),
+            A.RGBShift(r_shift_limit=70,always_apply=True),
+            A.Solarize(always_apply=True),
+            A.RandomFog(fog_coef_lower=0.01,always_apply=True),
+            A.ShiftScaleRotate(shift_limit= 0.1, scale_limit= 0.2, rotate_limit=65,always_apply=True)
+        ]
+
+        self.transform3 = [
             transforms.Pad(randint(20,40)),
             transforms.GaussianBlur(kernel_size=(5,9), sigma=(0.1,5)),
             transforms.RandomHorizontalFlip(p=1),
@@ -321,14 +336,13 @@ class MaskBaseDataset(Dataset):
         age_label = self.get_age_label(index)
         multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
-        
         if multi_class_label not in [0,1,3,9,10,14]:
             tmp = self.randAugment(randint(index%3,len(self.transform2)))
-            image = tmp(image)
-        image_transform = self.transform(image)
+            image = tmp(np.array(image))
+        image_transform = Image.fromarray(self.transform(image))
             
-        if randint(0,10)<5:
-            image_transform = AddGaussianNoise()(image_transform)
+        # if randint(0,10)<5:
+        #     image_transform = AddGaussianNoise()(image_transform)
         return image_transform, multi_class_label
 
     def randAugment(self,N):

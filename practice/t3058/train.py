@@ -250,7 +250,7 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
-    parser.add_argument('--epochs', type=int, default=1, help='number of epochs to train (default: 1)')
+    parser.add_argument('--epochs', type=int, default=5, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[512, 384 ], help='resize size for image when training')
@@ -258,9 +258,9 @@ if __name__ == '__main__':
     parser.add_argument('--valid_batch_size', type=int, default=20, help='input batch size for validing (default: 1000)')
     parser.add_argument('--model', type=str, default='MyModel', help='model type (default: MyModel)')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='optimizer type (default: SGD)')
-    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
+    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
-    parser.add_argument('--criterion', type=str, default='focal', help='criterion type (default: cross_entropy)')
+    parser.add_argument('--criterion', type=str, default='label_smoothing', help='criterion type (default: cross_entropy)')
     parser.add_argument('--lr_decay_step', type=int, default=1, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')

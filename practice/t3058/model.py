@@ -46,10 +46,9 @@ class MyModel(nn.Module):
         3. 모델의 output_dimension 은 num_classes 로 설정해주세요.
         """
         # models = torchvision.models.resnet152
-        # self.model = torchvision.models.resnet34(pretrained=True)
-        self.model = timm.create_model("halonet26t",pretrained=True)
-        self.model.head.fc = torch.nn.Linear(in_features=2304, out_features=18, bias=True)
-        torch.nn.init.xavier_uniform_(self.model.head.fc.weight)
+        self.model = torchvision.models.resnet152(pretrained=True)
+        self.model.fc = torch.nn.Linear(in_features=2048, out_features=18, bias=True)
+        torch.nn.init.xavier_uniform_(self.model.fc.weight)
 
     def forward(self, x):
         """
