@@ -57,7 +57,7 @@ class CustomAugmentation:
         self.transform = transforms.Compose([
             CenterCrop((320, 256)),
             Resize(resize, Image.BILINEAR),
-            ColorJitter(0.1, 0.1, 0.1, 0.1),
+            ColorJitter(0.7,0.4,0.1,0),
             ToTensor(),
             Normalize(mean=mean, std=std),
             AddGaussianNoise()
@@ -127,21 +127,18 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         ])
 
         self.transform2 = [transforms.Grayscale(3),
-            ColorJitter(0.1, 0.1, 0.1, 0.1),
             transforms.Pad(randint(4,50)),
             transforms.GaussianBlur(kernel_size=(5,9), sigma=(0.1,5)),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.ColorJitter(brightness=0.5, hue=0.3),
             transforms.RandomPerspective(distortion_scale=0.4,p=1.0),
             RandomRotation(degrees=40), 
-            ColorJitter(0.2, 0.4, 0.35, 0.1),
-            AddGaussianNoise()
+            transforms.ColorJitter(0.7,0.4,0.1,0),
         ]
         
         for i,img_dir in enumerate(XX):
             tmp = img_dir.split("/")
             if tmp[-1][0]=='.': continue
-            self.X.append([img_dir,i])
+            self.X.append(img_dir)
             mask,gender_age = tmp[-1],tmp[-2].split("_")
             gender,age = gender_age[1],int(gender_age[-1])
 
@@ -169,34 +166,35 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
 
             
             # if label in [2,7,13]:
-            #     for j in range(1,6):
-            #         self.X.append([img_dir,i+j])
+            #     for j in range(5):
+            #         self.X.append(img_dir)
             #         self.Y.append(label)
             # elif label in [5,6,12]:
-            #     for j in range(1,5):
-            #         self.X.append([img_dir,i+j])
+            #     for j in range(4):
+            #         self.X.append(img_dir)
             #         self.Y.append(label)
             # elif label in [4,8,11,17]:
-            #     for j in range(1,21):
-            #         self.X.append([img_dir,i+j])
+            #     for j in range(20):
+            #         self.X.append(img_dir)
             #         self.Y.append(label)
             # elif label in [15,16]:
-            #     for j in range(1,3):
-            #         self.X.append([img_dir,i+j])
+            #     for j in range(2):
+            #         self.X.append(img_dir)
             #         self.Y.append(label)
                     
                 
 
 
     def __getitem__(self, index):
-        
-        image = Image.open(self.X[index][0])
+        image = Image.open(self.X[index])
         if self.transform:
-        # if self.Y[index] not in [0,1,3,9,10,14]:
-            tmp = self.randAugment(randint(index%3,len(self.transform2)))
-            image = tmp(image)
+            if self.Y[index] not in [0,1,3,9,10,14]:
+                tmp = self.randAugment(randint(index%3,len(self.transform2)))
+                image = tmp(image)
             image = self.transform(image)
             
+        if randint(0,10)<5:
+            image = AddGaussianNoise()(image)    
         return image, self.Y[index]
 
     def __len__(self):
@@ -209,9 +207,11 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
         torch.utils.data.Subset 클래스 둘로 나눕니다.
         구현이 어렵지 않으니 구글링 혹은 IDE (e.g. pycharm) 의 navigation 기능을 통해 코드를 한 번 읽어보는 것을 추천드립니다^^
         """
+
         n_val = int(len(self) * self.val_ratio)
         n_train = len(self) - n_val
         train_set, val_set = random_split(self, [n_train, n_val])
+        # train_set, val_set = self[:n_train], self
         return train_set, val_set
     
     def set_transform(self, transform):
@@ -261,6 +261,15 @@ class MaskBaseDataset(Dataset):
         self.transform = None
         self.setup()
         self.calc_statistics()
+
+        self.transform2 = [
+            transforms.Pad(randint(20,40)),
+            transforms.GaussianBlur(kernel_size=(5,9), sigma=(0.1,5)),
+            transforms.RandomHorizontalFlip(p=1),
+            transforms.RandomPerspective(distortion_scale=0.3,p=1.0),
+            RandomRotation(degrees=40), 
+            ColorJitter(0.7,0.4,0.1,0),
+        ]
 
     def setup(self):
         profiles = os.listdir(self.data_dir)
@@ -312,9 +321,22 @@ class MaskBaseDataset(Dataset):
         age_label = self.get_age_label(index)
         multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
+        
+        if multi_class_label not in [0,1,3,9,10,14]:
+            tmp = self.randAugment(randint(index%3,len(self.transform2)))
+            image = tmp(image)
         image_transform = self.transform(image)
+            
+        if randint(0,10)<5:
+            image_transform = AddGaussianNoise()(image_transform)
         return image_transform, multi_class_label
 
+    def randAugment(self,N):
+        sample = list(np.random.choice(self.transform2, size = N))
+        random.shuffle(sample)
+        c= transforms.Compose(sample)
+        return c
+        
     def __len__(self):
         return len(self.image_paths)
 
@@ -388,12 +410,20 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
             "val": val_indices
         }
 
+    def appending(self, img_path,mask_label,gender_label,age_label,phase):
+        self.image_paths.append(img_path)
+        self.mask_labels.append(mask_label)
+        self.gender_labels.append(gender_label)
+        self.age_labels.append(age_label)
+        self.indices[phase].append(self.cnt)
+        self.cnt += 1
+
     def setup(self):
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
         split_profiles = self._split_profile(profiles, self.val_ratio)
 
-        cnt = 0
+        self.cnt = 0
         for phase, indices in split_profiles.items():
             for _idx in indices:
                 profile = profiles[_idx]
@@ -409,14 +439,24 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
                     id, gender, race, age = profile.split("_")
                     gender_label = GenderLabels.from_str(gender)
                     age_label = AgeLabels.from_number(age)
+                    self.appending(img_path,mask_label,gender_label,age_label,phase)
+                    label = self.encode_multi_class(mask_label,gender_label,age_label)
+                    
 
-                    self.image_paths.append(img_path)
-                    self.mask_labels.append(mask_label)
-                    self.gender_labels.append(gender_label)
-                    self.age_labels.append(age_label)
+                    label = self.encode_multi_class(mask_label,gender_label,age_label)
+                    if label in [2,7,13]:
+                        for j in range(5):
+                            self.appending(img_path,mask_label,gender_label,age_label,phase)
+                    elif label in [5,6,12]:
+                        for j in range(4):
+                            self.appending(img_path,mask_label,gender_label,age_label,phase)
+                    elif label in [4,8,11,17]:
+                        for j in range(20):
+                            self.appending(img_path,mask_label,gender_label,age_label,phase)
+                    elif label in [15,16]:
+                        for j in range(2):
+                            self.appending(img_path,mask_label,gender_label,age_label,phase)
 
-                    self.indices[phase].append(cnt)
-                    cnt += 1
 
     def split_dataset(self) -> List[Subset]:
         return [Subset(self, indices) for phase, indices in self.indices.items()]

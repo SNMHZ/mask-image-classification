@@ -15,12 +15,11 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from dataset import MaskBaseDataset
+from dataset import MaskBaseDataset, MaskSplitByProfileDataset
 from loss import create_criterion
 from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import Resize,ToTensor, Normalize
-
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -98,19 +97,19 @@ def train(data_dir, model_dir, args):
 
     # -- dataset
     dataset_module = getattr(import_module("dataset"), args.dataset)  # default: TrainDataset
-    dataset = dataset_module()
+    dataset = dataset_module(data_dir,)
     num_classes = dataset.num_classes  # 18
 
     # -- augmentation
-    dataset.set_resize(args.resize)
+    # dataset.set_resize(args.resize)
     # transform_module = getattr(import_module("dataset"), args.augmentation)  # default: BaseAugmentation
-    # transform = transforms.Compose([
-    # Resize(args.resize, Image.BILINEAR),
-    # ToTensor(),
-    # Normalize(mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)),
-    # ])
+    transform = transforms.Compose([
+    Resize(args.resize, Image.BILINEAR),
+    ToTensor(),
+    Normalize(mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)),
+    ])
 
-    # dataset.set_transform(transform)
+    dataset.set_transform(transform)
 
     # -- data_loader
     train_set, val_set = dataset.split_dataset()
@@ -162,7 +161,7 @@ def train(data_dir, model_dir, args):
         model.train()
         loss_value = 0
         matches = 0
-        for idx, train_batch in enumerate(train_loader):
+        for idx, train_batch in enumerate(train_loader):    #get_item 을 배치사이즈만큼 부름
             inputs, labels = train_batch
             inputs = inputs.to(device)
             labels = labels.to(device)
@@ -252,7 +251,7 @@ if __name__ == '__main__':
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
     parser.add_argument('--epochs', type=int, default=1, help='number of epochs to train (default: 1)')
-    parser.add_argument('--dataset', type=str, default='TrainDataset', help='dataset augmentation type (default: MaskBaseDataset)')
+    parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[512, 384 ], help='resize size for image when training')
     parser.add_argument('--batch_size', type=int, default=20, help='input batch size for training (default: 64)')
@@ -261,8 +260,8 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', type=str, default='AdamW', help='optimizer type (default: SGD)')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
-    parser.add_argument('--criterion', type=str, default='label_smoothing', help='criterion type (default: cross_entropy)')
-    parser.add_argument('--lr_decay_step', type=int, default=20, help='learning rate scheduler deacy step (default: 20)')
+    parser.add_argument('--criterion', type=str, default='focal', help='criterion type (default: cross_entropy)')
+    parser.add_argument('--lr_decay_step', type=int, default=1, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
 
