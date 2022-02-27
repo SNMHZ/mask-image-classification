@@ -7,6 +7,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import TestDataset, MaskBaseDataset
+import albumentations as A
+import numpy as np
 
 
 def load_model(saved_model, num_classes, device):
@@ -19,7 +21,8 @@ def load_model(saved_model, num_classes, device):
     # tar = tarfile.open(tarpath, 'r:gz')
     # tar.extractall(path=saved_model)
 
-    model_path = os.path.join(saved_model, 'best.pth')
+    # model_path = os.path.join(saved_model, 'best.pth')
+    model_path = os.path.join(saved_model, 'last.pth')
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model
@@ -53,16 +56,17 @@ def inference(data_dir, model_dir, output_dir, args):
 
     print("Calculating inference results..")
     preds = []
+    all_predictions = []
     with torch.no_grad():
         for idx, images in enumerate(loader):
             images = images.to(device)
-            pred = model(images)
-            pred = pred.argmax(dim=-1)
-            preds.extend(pred.cpu().numpy())
+            pred = model(images) / 3
+            pred += model(A.HorizontalFlip(always_apply=True, p = 1)(images)) / 3
+            pred += model(A.VerticalFlip(always_apply=True, p = 1)(images)) / 3
+            all_predictions.extend(pred.cpu().numpy())
 
-    info['ans'] = preds
-    info.to_csv(os.path.join(output_dir, f'output.csv'), index=False)
-    print(f'Inference Done!')
+        fold_pred = np.array(all_predictions)
+    return fold_pred / args.n_splits
 
 
 if __name__ == '__main__':
@@ -75,15 +79,27 @@ if __name__ == '__main__':
 
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_EVAL', '/opt/ml/input/data/eval'))
-    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_CHANNEL_MODEL', './model/exp_resnet152Albumentations2'))
+    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_CHANNEL_MODEL', './model/exp'))
     parser.add_argument('--output_dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', './output'))
+    parser.add_argument('--n_splits', default=5, help='Num_K for K-Fold')
 
     args = parser.parse_args()
 
     data_dir = args.data_dir
-    model_dir = args.model_dir
     output_dir = args.output_dir
 
     os.makedirs(output_dir, exist_ok=True)
+    oof_pred = None
 
-    inference(data_dir, model_dir, output_dir, args)
+    for i in range(args.n_splits):
+        model_dir = f"{args.model_dir}{i}"
+        if oof_pred is None:
+            oof_pred = inference(data_dir, model_dir, output_dir, args)
+        else:
+            oof_pred += inference(data_dir, model_dir, output_dir, args)
+
+    info_path = os.path.join(data_dir, 'info.csv')
+    info = pd.read_csv(info_path)
+    info['ans'] = np.argmax(oof_pred, axis = 1)
+    info.to_csv(os.path.join(output_dir, f'output.csv'), index=False)
+    print(f'Inference Done!')

@@ -265,16 +265,14 @@ class MaskBaseDataset(Dataset):
 
         self.transform2 = [
             A.Blur(blur_limit=6, always_apply=True),
-            A.CLAHE(clip_limit = 3,always_apply=True),
+            A.CLAHE(clip_limit = 2,always_apply=True),
             A.ColorJitter(0.7,0.4,0.1,0,always_apply=True),
-            A.Equalize(always_apply=True),
-            A.FancyPCA(alpha = 1,always_apply=True),
+            A.FancyPCA(alpha = 0.2,always_apply=True),
             A.GaussNoise(var_limit = 300,always_apply=True),
             A.MedianBlur(blur_limit=3,always_apply=True),
-            A.RGBShift(r_shift_limit=70,always_apply=True),
-            A.Solarize(always_apply=True),
             A.RandomFog(fog_coef_lower=0.01,always_apply=True),
-            A.ShiftScaleRotate(shift_limit= 0.1, scale_limit= 0.2, rotate_limit=65,always_apply=True)
+            A.ShiftScaleRotate(shift_limit= 0.1, scale_limit= 0.2, rotate_limit=55,always_apply=True),
+            A.RGBShift(r_shift_limit=3,always_apply=True)
         ]
 
         self.transform3 = [
@@ -338,8 +336,8 @@ class MaskBaseDataset(Dataset):
 
         if multi_class_label not in [0,1,3,9,10,14]:
             tmp = self.randAugment(randint(index%3,len(self.transform2)))
-            image = tmp(np.array(image))
-        image_transform = Image.fromarray(self.transform(image))
+            image = tmp(image = np.array(image))['image']
+        image_transform = transforms.ToTensor()(self.transform(image = np.array(image))['image'])
             
         # if randint(0,10)<5:
         #     image_transform = AddGaussianNoise()(image_transform)
@@ -348,7 +346,7 @@ class MaskBaseDataset(Dataset):
     def randAugment(self,N):
         sample = list(np.random.choice(self.transform2, size = N))
         random.shuffle(sample)
-        c= transforms.Compose(sample)
+        c= A.Compose(sample)
         return c
         
     def __len__(self):
@@ -408,8 +406,11 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
     """
 
-    def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
-        self.indices = defaultdict(list)
+    def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio= 5):
+        # self.indices = defaultdict(list)
+        # self.indices = []
+        self.X = []
+        self.Y = []
         super().__init__(data_dir, mean, std, val_ratio)
 
     @staticmethod
@@ -424,56 +425,81 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
             "val": val_indices
         }
 
-    def appending(self, img_path,mask_label,gender_label,age_label,phase):
+    # def appending(self, img_path,mask_label,gender_label,age_label,phase):
+    def appending(self, img_path,mask_label, gender_label, age_label):
         self.image_paths.append(img_path)
         self.mask_labels.append(mask_label)
         self.gender_labels.append(gender_label)
         self.age_labels.append(age_label)
-        self.indices[phase].append(self.cnt)
-        self.cnt += 1
+        # self.indices[phase].append(self.cnt)
+        self.personX.append(self.cnt)
 
     def setup(self):
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
-        split_profiles = self._split_profile(profiles, self.val_ratio)
+        # split_profiles = self._split_profile(profiles, self.val_ratio)
 
         self.cnt = 0
-        for phase, indices in split_profiles.items():
-            for _idx in indices:
-                profile = profiles[_idx]
-                img_folder = os.path.join(self.data_dir, profile)
-                for file_name in os.listdir(img_folder):
-                    _file_name, ext = os.path.splitext(file_name)
-                    if _file_name not in self._file_names:  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
-                        continue
+        # for phase, indices in split_profiles.items():
+            # for _idx in indices:
+        for _idx in range(len(profiles)):
+            profile = profiles[_idx]
+            img_folder = os.path.join(self.data_dir, profile)
+            self.personX = []
+            for file_name in os.listdir(img_folder):
+                _file_name, ext = os.path.splitext(file_name)
+                if _file_name not in self._file_names:  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+                    continue
 
-                    img_path = os.path.join(self.data_dir, profile, file_name)  # (resized_data, 000004_male_Asian_54, mask1.jpg)
-                    mask_label = self._file_names[_file_name]
+                img_path = os.path.join(self.data_dir, profile, file_name)  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+                mask_label = self._file_names[_file_name]
 
-                    id, gender, race, age = profile.split("_")
-                    gender_label = GenderLabels.from_str(gender)
-                    age_label = AgeLabels.from_number(age)
-                    self.appending(img_path,mask_label,gender_label,age_label,phase)
-                    label = self.encode_multi_class(mask_label,gender_label,age_label)
-                    
+                id, gender, race, age = profile.split("_")
+                gender_label = GenderLabels.from_str(gender)
+                age_label = AgeLabels.from_number(age)
+                # self.appending(img_path,mask_label,gender_label,age_label,phase)
+                label = self.encode_multi_class(mask_label,gender_label,age_label)
+                self.appending(img_path,mask_label, gender_label, age_label)
+                
 
-                    label = self.encode_multi_class(mask_label,gender_label,age_label)
-                    if label in [2,7,13]:
-                        for j in range(5):
-                            self.appending(img_path,mask_label,gender_label,age_label,phase)
-                    elif label in [5,6,12]:
-                        for j in range(4):
-                            self.appending(img_path,mask_label,gender_label,age_label,phase)
-                    elif label in [4,8,11,17]:
-                        for j in range(20):
-                            self.appending(img_path,mask_label,gender_label,age_label,phase)
-                    elif label in [15,16]:
-                        for j in range(2):
-                            self.appending(img_path,mask_label,gender_label,age_label,phase)
+                if label in [2,7,13]:
+                    for j in range(5):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [5,6,12]:
+                    for j in range(4):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [4,8,11,17]:
+                    for j in range(20):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [15,16]:
+                    for j in range(2):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                self.cnt+=1
+            self.X.append(self.personX)
+        self.cnt = len(self.X)//self.val_ratio
+        before = 0
+        tmpX = []
+        while True:
+            if before+self.cnt>len(self.X):
+                tmpX.append(self.X[before:])
+                break
+            else:
+                tmpX.append(self.X[before:before+self.cnt])
+                before+=self.cnt
+        self.X = tmpX
 
-
-    def split_dataset(self) -> List[Subset]:
-        return [Subset(self, indices) for phase, indices in self.indices.items()]
+    def split_dataset(self,idx) -> List[Subset]:
+        val_indices = []
+        for i in self.X[idx]:
+            val_indices+=i
+        train_indices = []
+        for i in range(len(self.X)):
+            if i!=idx:
+                for j in self.X[i]:
+                    train_indices+=j
+        train_set, val_set = Subset(self,train_indices), Subset(self, val_indices)
+        return [train_set,val_set]
+        # return [Subset(self, indices) for phase, indices in self.indices.items()]
 
 
 class TestDataset(Dataset):
