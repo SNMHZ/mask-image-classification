@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from sklearn.metrics import f1_score
 
 # https://discuss.pytorch.org/t/is-this-a-correct-implementation-for-focal-loss-in-pytorch/43327/8
 class FocalLoss(nn.Module):
@@ -64,12 +64,23 @@ class F1Loss(nn.Module):
         f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
         return 1 - f1.mean()
 
+class F1Loss2(nn.Module):
+    def __init__(self, classes=18):
+        super().__init__()
+    def forward(self, y_pred, y_true):
+        assert y_pred.ndim == 2
+        assert y_true.ndim == 1
+        y_true = F.one_hot(y_true, self.classes).to(torch.float32)
+        y_pred = F.softmax(y_pred, dim=1)
+        return f1_score(y_true, y_pred)
+
 
 _criterion_entrypoints = {
     'cross_entropy': nn.CrossEntropyLoss,
     'focal': FocalLoss,
     'label_smoothing': LabelSmoothingLoss,
-    'f1': F1Loss
+    'f1': F1Loss,
+    'f12' : F1Loss2
 }
 
 

@@ -189,9 +189,8 @@ class TrainDataset(Dataset):    #Dataset만 받아야 한다.
     def __getitem__(self, index):
         image = Image.open(self.X[index])
         if self.transform:
-            if self.Y[index] not in [0,1,3,9,10,14]:
-                tmp = self.randAugment(randint(index%3,len(self.transform2)))
-                image = tmp(image)
+            tmp = self.randAugment(randint(index%3,len(self.transform2)))
+            image = tmp(image)
             image = self.transform(image)
             
         if randint(0,10)<5:
@@ -269,10 +268,14 @@ class MaskBaseDataset(Dataset):
             A.ColorJitter(0.7,0.4,0.1,0,always_apply=True),
             A.FancyPCA(alpha = 0.2,always_apply=True),
             A.GaussNoise(var_limit = 300,always_apply=True),
+            A.GaussNoise(var_limit = 100,always_apply=True),
             A.MedianBlur(blur_limit=3,always_apply=True),
             A.RandomFog(fog_coef_lower=0.01,always_apply=True),
             A.ShiftScaleRotate(shift_limit= 0.1, scale_limit= 0.2, rotate_limit=55,always_apply=True),
-            A.RGBShift(r_shift_limit=3,always_apply=True)
+            A.RGBShift(r_shift_limit=3,always_apply=True),
+            A.Flip(always_apply=True, p= 0.5),
+            A.Sharpen(alpha = (1.0,1.0),always_apply=True)
+            
         ]
 
         self.transform3 = [
@@ -334,7 +337,7 @@ class MaskBaseDataset(Dataset):
         age_label = self.get_age_label(index)
         multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
-        if multi_class_label not in [0,1,3,9,10,14]:
+        if multi_class_label not in [0,1,3,9,10]:
             tmp = self.randAugment(randint(index%3,len(self.transform2)))
             image = tmp(image = np.array(image))['image']
         image_transform = transforms.ToTensor()(self.transform(image = np.array(image))['image'])
@@ -433,8 +436,10 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         self.age_labels.append(age_label)
         # self.indices[phase].append(self.cnt)
         self.personX.append(self.cnt)
+        self.l[self.encode_multi_class(mask_label,gender_label,age_label)]+=1
 
     def setup(self):
+        self.l = [0 for _ in range(18)]
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
         # split_profiles = self._split_profile(profiles, self.val_ratio)
@@ -461,18 +466,22 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
                 label = self.encode_multi_class(mask_label,gender_label,age_label)
                 self.appending(img_path,mask_label, gender_label, age_label)
                 
-
+                if label in [0]:
+                    self.appending(img_path,mask_label, gender_label, age_label)
                 if label in [2,7,13]:
-                    for j in range(5):
+                    for j in range(9):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [5,6,12]:
-                    for j in range(4):
+                    for j in range(7):
                         self.appending(img_path,mask_label, gender_label, age_label)
-                elif label in [4,8,11,17]:
-                    for j in range(20):
-                        self.appending(img_path,mask_label, gender_label, age_label)
-                elif label in [15,16]:
+                elif label in [1]:
                     for j in range(2):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [8,11,14,17]:
+                    for j in range(40):
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [9,10,15,16]:
+                    for j in range(4):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 self.cnt+=1
             self.X.append(self.personX)
@@ -487,6 +496,7 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
                 tmpX.append(self.X[before:before+self.cnt])
                 before+=self.cnt
         self.X = tmpX
+        print(self.l)
 
     def split_dataset(self,idx) -> List[Subset]:
         val_indices = []

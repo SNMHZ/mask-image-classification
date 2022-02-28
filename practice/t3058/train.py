@@ -84,7 +84,7 @@ def increment_path(path, exist_ok=False):
         n = max(i) + 1 if i else 2
         return f"{path}{n}"
 
-def getDataloader(dataset, use_cuda, i):
+def getDataloader(dataset, use_cuda, train_set,val_set):
 
     # -- augmentation
     # dataset.set_resize(args.resize)
@@ -92,7 +92,6 @@ def getDataloader(dataset, use_cuda, i):
 
     # -- data_loader
 
-    train_set, val_set = dataset.split_dataset(i)
 
     train_loader = DataLoader(
         train_set,
@@ -140,7 +139,6 @@ def train(data_dir, model_dir, args):
     
     for i in range(args.n_splits):
         save_dir = increment_path(f"{model_dir}/{args.name}{i}")
-        train_loader, val_loader = getDataloader(dataset, use_cuda, i)
     
         # -- model
         model_module = getattr(import_module("model"), args.model)  # default: MyModel
@@ -160,13 +158,15 @@ def train(data_dir, model_dir, args):
         scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
 
         # -- logging
-        logger = SummaryWriter(log_dir=f"{save_dir}/{i}")
+        logger = SummaryWriter(log_dir=f"{save_dir}")
         with open(os.path.join(save_dir, 'config.json'), 'w', encoding='utf-8') as f:
             json.dump(vars(args), f, ensure_ascii=False, indent=4)
 
 
 
         for epoch in range(args.epochs):
+            train_set, val_set = dataset.split_dataset(epoch)
+            train_loader, val_loader = getDataloader(dataset, use_cuda, train_set,val_set)
             # train loop
             model.train()
             loss_value = 0
@@ -235,7 +235,7 @@ def train(data_dir, model_dir, args):
                         )
 
                 val_loss = np.sum(val_loss_items) / len(val_loader)
-                val_acc = np.sum(val_acc_items) / len(val_loader)
+                val_acc = np.sum(val_acc_items) / len(val_set)
                 best_val_loss = min(best_val_loss, val_loss)
                 if val_acc > best_val_acc:
                     print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
@@ -260,21 +260,21 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
-    parser.add_argument('--epochs', type=int, default=1, help='number of epochs to train (default: 1)')
+    parser.add_argument('--epochs', type=int, default=4, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[512, 384 ], help='resize size for image when training')
     parser.add_argument('--batch_size', type=int, default=20, help='input batch size for training (default: 64)')
     parser.add_argument('--valid_batch_size', type=int, default=20, help='input batch size for validing (default: 1000)')
-    parser.add_argument('--model', type=str, default='MyModel', help='model type (default: MyModel)')
-    parser.add_argument('--optimizer', type=str, default='AdamW', help='optimizer type (default: SGD)')
-    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate (default: 1e-3)')
+    parser.add_argument('--model', type=str, default='MyModel2', help='model type (default: MyModel)')
+    parser.add_argument('--optimizer', type=str, default='Adamax', help='optimizer type (default: SGD)')
+    parser.add_argument('--lr', type=float, default=5e-4, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
     parser.add_argument('--criterion', type=str, default='label_smoothing', help='criterion type (default: cross_entropy)')
     parser.add_argument('--lr_decay_step', type=int, default=1, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
-    parser.add_argument('--n_splits', default=5, help='Num_K for K-Fold')
+    parser.add_argument('--n_splits', default=1, help='Num_K for K-Fold')
 
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images'))
