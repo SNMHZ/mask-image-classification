@@ -18,7 +18,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torchsampler import ImbalancedDatasetSampler
 
 from copy import copy
-# from dataset import MaskBaseDataset
 from dataset import MaskBaseDataset
 from loss import create_criterion
 
@@ -135,7 +134,6 @@ def train(data_dir, model_dir, args):
 
     # -- data_loader
     train_set, val_set = dataset.split_dataset()
-    #print([dataset.image_labels[i] for i in train_set.indices])
 
     ## ImbalancedSampler
     train_loader = DataLoader(
@@ -155,7 +153,6 @@ def train(data_dir, model_dir, args):
         pin_memory=use_cuda,
         drop_last=True,
     )
-    print(next(iter(train_loader))[1].unique(return_counts = True))
 
     # -- model
     model_module = getattr(import_module("model"), args.model)  # default: BaseModel
@@ -232,6 +229,14 @@ def train(data_dir, model_dir, args):
 
                 loss_value = 0
                 matches = 0
+
+            # # check image
+            # inputs_np = torch.clone(inputs).detach().cpu().permute(0, 2, 3, 1).numpy()
+            # inputs_np = dataset_module.denormalize_image(inputs_np, dataset.mean, dataset.std)
+            # figure = grid_image(
+            # inputs_np, labels, preds, n=32, shuffle=args.dataset != "MaskSplitByProfileDataset"
+            # )
+            # logger.add_figure("results", figure, epoch)
 
         scheduler.step()
 

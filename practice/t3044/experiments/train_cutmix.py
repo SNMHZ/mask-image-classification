@@ -137,7 +137,8 @@ def train(data_dir, model_dir, args):
     train_loader = DataLoader(
         train_set,
         batch_size=args.batch_size,
-        num_workers=multiprocessing.cpu_count()//2,
+        #num_workers=multiprocessing.cpu_count()//2,
+        num_workers=2,
         shuffle=True,
         pin_memory=use_cuda,
         drop_last=True,
@@ -146,7 +147,8 @@ def train(data_dir, model_dir, args):
     val_loader = DataLoader(
         val_set,
         batch_size=args.valid_batch_size,
-        num_workers=multiprocessing.cpu_count()//2,
+        #num_workers=multiprocessing.cpu_count()//2,
+        num_workers=2,
         shuffle=False,
         pin_memory=use_cuda,
         drop_last=True,
@@ -310,7 +312,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
 
     # Container environment
-    parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images_augmented_1500'))
+    parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images_augmented_1000'))
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
 
     args = parser.parse_args()
