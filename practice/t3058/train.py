@@ -113,6 +113,24 @@ def getDataloader(dataset, use_cuda, train_set,val_set):
     return train_loader, val_loader
 
     
+def f1score(y_pred,y_true):
+    import torch.nn.functional as F
+    epsilon = 1e-7
+    y_true = F.one_hot(y_true, 18).to(torch.float32)
+    y_pred = F.softmax(y_pred, dim=1)
+
+    tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
+    # tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
+    fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
+    fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
+
+    precision = tp / (tp + fp + epsilon)
+    recall = tp / (tp + fn + epsilon)
+
+    f1 = 2 * (precision * recall) / (precision + recall + epsilon)
+    f1 = f1.clamp(min=epsilon, max=1 - epsilon)
+    return f1
+
 def train(data_dir, model_dir, args):
     seed_everything(args.seed)
 
@@ -125,14 +143,7 @@ def train(data_dir, model_dir, args):
     # -- dataset
     dataset_module = getattr(import_module("dataset"), args.dataset)  # default: TrainDataset
     dataset = dataset_module(data_dir,)
-    num_classes = dataset.num_classes  # 18
-
-    transform = A.Compose([
-    A.Resize(height = args.resize[0], width= args.resize[1],always_apply = True),
-    A.Normalize(mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), always_apply=True),
-    ])
-
-    dataset.set_transform(transform)
+    # num_classes = dataset.num_classes  # 18
 
     best_val_acc = 0
     best_val_loss = np.inf
@@ -141,21 +152,25 @@ def train(data_dir, model_dir, args):
         save_dir = increment_path(f"{model_dir}/{args.name}{i}")
     
         # -- model
+        model = [3,2,3]
         model_module = getattr(import_module("model"), args.model)  # default: MyModel
-        model = model_module(
-            num_classes=num_classes
-        ).to(device)
-        model = torch.nn.DataParallel(model)
+        optimizer = [0,0,0]
+        criterion = [0,0,0]
+        for j in range(3):
+            model[j] = model_module(
+                num_classes=model[j]
+            ).to(device)
+            model[j] = torch.nn.DataParallel(model[j])
 
         # -- loss & metric
-        criterion = create_criterion(args.criterion)  # default: cross_entropy
-        opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: Adam
-        optimizer = opt_module(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=args.lr,
-            weight_decay=5e-4
-        )
-        scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+            criterion[j] = create_criterion(args.criterion)  # default: cross_entropy
+            opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: Adam
+            optimizer[j] = opt_module(
+                filter(lambda p: p.requires_grad, model[j].parameters()),
+                lr=args.lr,
+                weight_decay=1e-3
+            )
+            scheduler = StepLR(optimizer[j], args.lr_decay_step, gamma=0.5)
 
         # -- logging
         logger = SummaryWriter(log_dir=f"{save_dir}")
@@ -168,41 +183,66 @@ def train(data_dir, model_dir, args):
             train_set, val_set = dataset.split_dataset(epoch)
             train_loader, val_loader = getDataloader(dataset, use_cuda, train_set,val_set)
             # train loop
-            model.train()
-            loss_value = 0
+            model[0].train()
+            model[1].train()
+            model[2].train()
+            loss_value0 = 0
+            loss_value1 = 0
+            loss_value2 = 0
             matches = 0
             for idx, train_batch in enumerate(train_loader):    #get_item 을 배치사이즈만큼 부름
                 inputs, labels = train_batch
                 inputs = inputs.to(device)
-                labels = labels.to(device)
+                mask_labels, gender_labels, age_labels = labels
+                mask_labels = mask_labels.to(device)
+                gender_labels = gender_labels.to(device)
+                age_labels = age_labels.to(device)
 
-                outs = model(inputs)
-                preds = torch.argmax(outs, dim=-1)
-                loss = criterion(outs, labels)
+                # outs = model(inputs)
+                mask_out = model[0](inputs)
+                gender_out = model[1](inputs)
+                age_out = model[2](inputs)
+                # outs = 6*mask_out + 3*gender_out + age_out
+                # preds = torch.argmax(outs, dim=-1)
+                preds = 6*torch.argmax(mask_out, dim=-1) + 3*torch.argmax(gender_out, dim=-1) + torch.argmax(age_out, dim=-1)
+                loss0 = criterion[0](mask_out, mask_labels)
+                loss1 = criterion[1](gender_out, gender_labels)
+                loss2 = criterion[2](age_out, age_labels)
 
-                loss.backward()
+                loss0.backward()
+                loss1.backward()
+                loss2.backward()
                 
                 
                 if idx%2==0:
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    for j in range(3):
+                        optimizer[j].step()
+                        optimizer[j].zero_grad()
 
 
-                loss_value += loss.item()
-                matches += (preds == labels).sum().item()
+                loss_value0 += loss0.item()
+                loss_value1 += loss1.item()
+                loss_value2 += loss2.item()
+                matches += (preds == 6*mask_labels+3*gender_labels+age_labels).sum().item()
                 if (idx + 1) % args.log_interval == 0:
-                    train_loss = loss_value / args.log_interval
+                    train_loss0 = loss_value0 / args.log_interval
+                    train_loss1 = loss_value1 / args.log_interval
+                    train_loss2 = loss_value2 / args.log_interval
                     train_acc = matches / args.batch_size / args.log_interval
-                    current_lr = get_lr(optimizer)
+                    current_lr = get_lr(optimizer[0])
                     print(
                         f"Epoch[{epoch}/{args.epochs}]({idx + 1}/{len(train_loader)}) || "
-                        f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr}"
+                        f"training loss0 {train_loss0:4.4} || training loss1 {train_loss1:4.4} || training loss2 {train_loss2:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr} "
                     )
-                    logger.add_scalar("Train/loss", train_loss, epoch * len(train_loader) + idx)
+                    logger.add_scalar("Train/loss0", train_loss0, epoch * len(train_loader) + idx)
+                    logger.add_scalar("Train/loss1", train_loss1, epoch * len(train_loader) + idx)
+                    logger.add_scalar("Train/loss2", train_loss2, epoch * len(train_loader) + idx)
                     logger.add_scalar("Train/accuracy", train_acc, epoch * len(train_loader) + idx)
                     logger.add_scalar("Train/lr", current_lr, epoch * len(train_loader) + idx)
 
-                    loss_value = 0
+                    loss_value0 = 0
+                    loss_value1 = 0
+                    loss_value2 = 0
                     matches = 0
 
             scheduler.step()
@@ -210,7 +250,9 @@ def train(data_dir, model_dir, args):
             # val loop
             with torch.no_grad():
                 print("Calculating validation results...")
-                model.eval()
+                model[0].eval()
+                model[1].eval()
+                model[2].eval()
                 val_loss_items = []
                 val_acc_items = []
                 figure = None
@@ -219,7 +261,11 @@ def train(data_dir, model_dir, args):
                     inputs = inputs.to(device)
                     labels = labels.to(device)
 
-                    outs = model(inputs)
+                    # outs = model(inputs)
+                    mask_out = model[0](inputs)
+                    gender_out = model[1](inputs)
+                    age_out = model[2](inputs)
+                    outs = 6*mask_out + 3*gender_out + age_out
                     preds = torch.argmax(outs, dim=-1)
 
                     loss_item = criterion(outs, labels).item()
@@ -239,12 +285,17 @@ def train(data_dir, model_dir, args):
                 best_val_loss = min(best_val_loss, val_loss)
                 if val_acc > best_val_acc:
                     print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
-                    torch.save(model.state_dict(), f"{save_dir}/best.pth")
+                    torch.save(model[0].state_dict(), f"{save_dir}/best0.pth")
+                    torch.save(model[1].state_dict(), f"{save_dir}/best1.pth")
+                    torch.save(model[2].state_dict(), f"{save_dir}/best2.pth")
                     best_val_acc = val_acc
-                torch.save(model.state_dict(), f"{save_dir}/last.pth")
+                torch.save(model[0].state_dict(), f"{save_dir}/last0.pth")
+                torch.save(model[1].state_dict(), f"{save_dir}/last1.pth")
+                torch.save(model[2].state_dict(), f"{save_dir}/last2.pth")
                 print(
                     f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
-                    f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
+                    f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} "
+                    f"f1 {f1score(outs,labels)}"
                 )
                 logger.add_scalar("Val/loss", val_loss, epoch)
                 logger.add_scalar("Val/accuracy", val_acc, epoch)
@@ -263,10 +314,10 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=4, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
-    parser.add_argument("--resize", nargs="+", type=list, default=[512, 384 ], help='resize size for image when training')
+    parser.add_argument("--resize", nargs="+", type=list, default=[228, 228 ], help='resize size for image when training')
     parser.add_argument('--batch_size', type=int, default=20, help='input batch size for training (default: 64)')
     parser.add_argument('--valid_batch_size', type=int, default=20, help='input batch size for validing (default: 1000)')
-    parser.add_argument('--model', type=str, default='MyModel2', help='model type (default: MyModel)')
+    parser.add_argument('--model', type=str, default='exp9_tf_efficientnetv2_b2', help='model type (default: MyModel)')
     parser.add_argument('--optimizer', type=str, default='Adamax', help='optimizer type (default: SGD)')
     parser.add_argument('--lr', type=float, default=5e-4, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
@@ -282,6 +333,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     print(args)
+
+
 
     data_dir = args.data_dir
     model_dir = args.model_dir

@@ -24,7 +24,7 @@ class FocalLoss(nn.Module):
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=18, smoothing=0.0, dim=-1):
+    def __init__(self, classes=18, smoothing=0.1, dim=-1):
         super(LabelSmoothingLoss, self).__init__()
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -53,7 +53,7 @@ class F1Loss(nn.Module):
         y_pred = F.softmax(y_pred, dim=1)
 
         tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
-        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        # tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
         fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
         fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
 
@@ -64,23 +64,12 @@ class F1Loss(nn.Module):
         f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
         return 1 - f1.mean()
 
-class F1Loss2(nn.Module):
-    def __init__(self, classes=18):
-        super().__init__()
-    def forward(self, y_pred, y_true):
-        assert y_pred.ndim == 2
-        assert y_true.ndim == 1
-        y_true = F.one_hot(y_true, self.classes).to(torch.float32)
-        y_pred = F.softmax(y_pred, dim=1)
-        return f1_score(y_true, y_pred)
-
 
 _criterion_entrypoints = {
     'cross_entropy': nn.CrossEntropyLoss,
     'focal': FocalLoss,
     'label_smoothing': LabelSmoothingLoss,
     'f1': F1Loss,
-    'f12' : F1Loss2
 }
 
 
