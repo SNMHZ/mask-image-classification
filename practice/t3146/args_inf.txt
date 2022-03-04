@@ -1,0 +1,3 @@
+--model CatFc_Freeze_Res18_Effib0_Out8
+--batch_size 128
+--model_dir ./model/exp62

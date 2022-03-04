@@ -1,0 +1,15 @@
+--seed 777 
+--epochs 10
+
+--lr 1e-4
+--resize 384 512
+--batch_size 64
+
+--model CatFc_Freeze_Res18_Effib0_Out8
+--dataset MaskSplitByProfileDataset
+--augmentation BaseAugmentation
+
+--optimizer Adam
+--criterion cross_entropy_by_labels
+
+--name exp
