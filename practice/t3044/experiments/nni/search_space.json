@@ -1,0 +1,6 @@
+{
+    "batch_size": {"_type":"choice", "_value": [16, 20, 32, 64]},
+    "lr":{"_type":"choice","_value":[0.0001, 0.001, 0.01, 0.1]},
+    "optimizer":{"_type":"choice","_value":["Adam", "SGD"]},
+    "criterion":{"_type":"choice","_value":["cross_entropy", "focal", "label_smoothing"]}
+}
