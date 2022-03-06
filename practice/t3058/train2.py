@@ -10,7 +10,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.utils import shuffle
 import torch
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
@@ -21,9 +20,6 @@ from dataset import MaskBaseDataset, MaskSplitByProfileDataset
 from loss import create_criterion
 from PIL import Image
 import albumentations as A
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from pytorch_grad_cam.utils.image import show_cam_on_image
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -139,7 +135,7 @@ def train(data_dir, model_dir, args):
     seed_everything(args.seed)
 
     # save_dir = model_dir
-
+    
     # -- settings
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
@@ -260,7 +256,6 @@ def train(data_dir, model_dir, args):
                 val_loss_items = [[],[],[]]
                 val_acc_items = []
                 figure = None
-                figure2 = None
                 for val_batch in val_loader:
                     inputs, labels = val_batch
                     inputs = inputs.to(device)
@@ -276,7 +271,6 @@ def train(data_dir, model_dir, args):
                     lbl = 6*mask_labels+3*gender_labels+age_labels
                     preds = 6*torch.argmax(mask_out, dim=-1) + 3*torch.argmax(gender_out, dim=-1) + torch.argmax(age_out, dim=-1)   
 
-
                     
                     outt =[mask_out,gender_out,age_out]
                     labell = [mask_labels,gender_labels,age_labels]
@@ -291,14 +285,6 @@ def train(data_dir, model_dir, args):
                         figure = grid_image(
                             inputs_np, lbl, preds, n=16, shuffle=args.dataset != "MaskSplitByProfileDataset"
                         )
-                        with GradCAM(model = model, target_layers= [model.model.layer4], use_cuda= use_cuda) as cam:
-                            grayscale_cam = cam(input_tensor=inputs, targets= ClassifierOutputTarget(3))
-                            grayscale_cam = grayscale_cam[0, :]
-                            cam_image = show_cam_on_image(inputs_np, grayscale_cam, use_rgb=True)
-                            figure2 = grid_image(
-                                cam_image, lbl, preds, n=16, shuffle= args.dataset != "MaskSplitByProfileDataset"
-                            )
-
                 for k in range(3):
                     val_loss = np.sum(val_loss_items[k]) / len(val_loader)
                     val_acc = np.sum(val_acc_items) / len(val_set)
@@ -309,6 +295,7 @@ def train(data_dir, model_dir, args):
                         best_val_acc[k] = val_acc
                     torch.save(model[k].state_dict(), f"{save_dir}/last{k}.pth")
                     print(
+
                         f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
                         f"best acc : {best_val_acc[k]:4.2%}, best loss: {best_val_loss:4.2} "
                         # f"f1 {f1score(outs,labels)}"
@@ -317,7 +304,6 @@ def train(data_dir, model_dir, args):
                     logger.add_scalar(f"Val/loss{k}", val_loss, epoch)
                     logger.add_scalar(f"Val/accuracy{k}", val_acc, epoch)
                 logger.add_figure("results", figure, epoch)
-                logger.add_figure("results_cam", figure2, epoch)
                 print()
 
         logger.flush()

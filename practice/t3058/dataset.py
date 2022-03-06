@@ -265,15 +265,13 @@ class MaskBaseDataset(Dataset):
         self.calc_statistics()
 
         self.transform2 = [
-            A.CLAHE(clip_limit = 2,always_apply=True),
-            A.ColorJitter(0.2,0.4,0.1,0,always_apply=True),
-            A.FancyPCA(alpha = 0.2,always_apply=True),
+            A.CLAHE(clip_limit = 3,always_apply=True),
+            A.ColorJitter(0.1,0.4,0.1,0,always_apply=True),
+            A.FancyPCA(alpha = 0.05,always_apply=True),
             A.GaussNoise(var_limit = 100,always_apply=True),
-            A.RandomFog(fog_coef_lower=0.01,fog_coef_upper=0.5,always_apply=True),
+            A.RandomFog(fog_coef_lower=0.01,fog_coef_upper=0.2,always_apply=True),
             A.ShiftScaleRotate(shift_limit= 0.02, scale_limit= 0, rotate_limit=6,always_apply=True),
-            A.RGBShift(r_shift_limit=3,always_apply=True),
-            A.Sharpen(alpha = (1.0,1.0),always_apply=True)
-            
+            A.Sharpen(alpha = (1.0,1.0), lightness=(0.8,1),always_apply=True)
         ]
 
     def setup(self):
@@ -460,28 +458,32 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
                 
                 if label in [0]:
                     self.appending(img_path,mask_label, gender_label, age_label)
+                    self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [1]:
                         self.appending(img_path,mask_label, gender_label, age_label)
+                        self.appending(img_path,mask_label, gender_label, age_label)
+                elif label in [3,4]:
+                    self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [2,7,13]:
-                    for j in range(9):
+                    for j in range(18):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [5]:
-                    for j in range(8):
+                    for j in range(16):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [6,12]:
-                    for j in range(7):
+                    for j in range(14):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [11]:
-                    for j in range(45):
+                    for j in range(90):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [8,14]:
-                    for j in range(50):
+                    for j in range(80):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [17]:
-                    for j in range(44):
+                    for j in range(88):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 elif label in [9,10,15,16]:
-                    for j in range(5):
+                    for j in range(10):
                         self.appending(img_path,mask_label, gender_label, age_label)
                 self.cnt+=1
             self.X.append(self.personX)
@@ -505,9 +507,12 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
             val_indices+=i
         train_indices = []
         for i in range(len(self.X)):
-            if i!=idx:
-                for j in self.X[i]:
-                    train_indices+=j
+            # if i!=idx:
+            #     for j in self.X[i]:
+            #         train_indices+=j
+            for j in self.X[i]:
+                train_indices+=j
+
         train_set, val_set = Subset(self,train_indices), Subset(self, val_indices)
         return [train_set,val_set]
         # return [Subset(self, indices) for phase, indices in self.indices.items()]

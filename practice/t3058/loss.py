@@ -24,7 +24,7 @@ class FocalLoss(nn.Module):
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=18, smoothing=0.1, dim=-1):
+    def __init__(self, classes=18, smoothing=0.02, dim=-1):
         super(LabelSmoothingLoss, self).__init__()
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -55,12 +55,13 @@ class F1Loss(nn.Module):
         tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
         # tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
         fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
-        fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        # fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
 
-        precision = tp / (tp + fp + self.epsilon)
-        recall = tp / (tp + fn + self.epsilon)
+        # precision = tp / (tp + fp + self.epsilon)
+        # recall = tp / (tp + fn + self.epsilon)
 
-        f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
+        # f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
+        f1 = tp/ (tp+fp)
         f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
         return 1 - f1.mean()
 
