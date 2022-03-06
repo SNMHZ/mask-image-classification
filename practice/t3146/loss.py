@@ -1,3 +1,6 @@
+from base64 import decode
+from email.header import decode_header
+from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,7 +27,7 @@ class FocalLoss(nn.Module):
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=3, smoothing=0.1, dim=-1):
+    def __init__(self, classes=3, smoothing=0.0, dim=-1):
         super(LabelSmoothingLoss, self).__init__()
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -46,6 +49,7 @@ class F1Loss(nn.Module):
         super().__init__()
         self.classes = classes
         self.epsilon = epsilon
+
     def forward(self, y_pred, y_true):
         assert y_pred.ndim == 2
         assert y_true.ndim == 1
@@ -65,11 +69,33 @@ class F1Loss(nn.Module):
         return 1 - f1.mean()
 
 
+from dataset import MaskBaseDataset
+
+class CrossEntropyByLabels(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = nn.CrossEntropyLoss()
+        self.label_decoder = MaskBaseDataset.decode_multi_class
+        self.indice = torch.tensor([3, 2, 3])
+    
+    def forward(self, y_pred: torch.Tensor, y_true: int):
+        mask_true, gender_true, age_true = self.label_decoder(y_true)
+        mask_pred, age_pred, gender_pred = y_pred.split(3, dim=1)
+
+        mask_loss = self.loss(mask_pred, mask_true)
+        age_loss = self.loss(age_pred, age_true)
+        gender_loss = self.loss(gender_pred, gender_true)
+
+        return mask_loss+age_loss+gender_loss
+
+
+
 _criterion_entrypoints = {
     'cross_entropy': nn.CrossEntropyLoss,
     'focal': FocalLoss,
     'label_smoothing': LabelSmoothingLoss,
-    'f1': F1Loss
+    'f1': F1Loss,
+    'cross_entropy_by_labels': CrossEntropyByLabels
 }
 
 

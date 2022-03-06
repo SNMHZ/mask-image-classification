@@ -37,23 +37,6 @@ class BaseAugmentation:
         return self.transform(image)
 
 
-class AddGaussianNoise(object):
-    """
-        transform 에 없는 기능들은 이런식으로 __init__, __call__, __repr__ 부분을
-        직접 구현하여 사용할 수 있습니다.
-    """
-
-    def __init__(self, mean=0., std=1.):
-        self.std = std
-        self.mean = mean
-
-    def __call__(self, tensor):
-        return tensor + torch.randn(tensor.size()) * self.std + self.mean
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
-
-
 class CustomAugmentation1:
     def __init__(self, resize, mean, std, **args):
         self.transform = albumentations.Compose([
@@ -80,21 +63,12 @@ class CustomAugmentation1:
         return self.transform(image=np.array(image))['image']
 
 
+# for cutmix
 class CustomAugmentation2:
     def __init__(self, resize, mean, std, **args):
         self.transform = albumentations.Compose([
             albumentations.Resize(height=resize[0], width=resize[1], always_apply=True),
-            albumentations.OneOf([
-                albumentations.HorizontalFlip(p=0.9),  # 좌우 반전
-                albumentations.VerticalFlip(p=0.9),  # 상하 반전,
-                albumentations.Affine(p=0.9),
-                albumentations.ShiftScaleRotate(
-                    shift_limit=0.2,
-                    scale_limit=0.2,
-                    rotate_limit=10,
-                    border_mode=0,
-                    p=0.9),
-            ], p=0),  # p=0, for cutmix
+            #albumentations.CenterCrop(180, 180, p=1),
             albumentations.GaussNoise(p=0.4),
             albumentations.OneOf([
                 albumentations.MotionBlur(p=0.8),
@@ -174,9 +148,7 @@ class MaskBaseDataset(Dataset):
     }
 
     image_paths = []
-    mask_labels = []
-    gender_labels = []
-    age_labels = []
+    image_labels = []
 
     def __init__(self, data_dir, mean=(0.5, 0.5, 0.5), std=(0.2, 0.2, 0.2), val_ratio=0.2):
         self.data_dir = data_dir
@@ -207,10 +179,10 @@ class MaskBaseDataset(Dataset):
                 gender_label = GenderLabels.from_str(gender)
                 age_label = AgeLabels.from_number(age)
 
+                img_label = self.encode_multi_class(mask_label, gender_label, age_label)
+
                 self.image_paths.append(img_path)
-                self.mask_labels.append(mask_label)
-                self.gender_labels.append(gender_label)
-                self.age_labels.append(age_label)
+                self.image_labels.append(img_label)
 
     def calc_statistics(self):
         has_statistics = self.mean is not None and self.std is not None
@@ -234,10 +206,7 @@ class MaskBaseDataset(Dataset):
         assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
 
         image = self.read_image(index)
-        mask_label = self.get_mask_label(index)
-        gender_label = self.get_gender_label(index)
-        age_label = self.get_age_label(index)
-        multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
+        multi_class_label = self.image_labels[index]
 
         image_transform = self.transform(image)
         return image_transform, multi_class_label
@@ -245,14 +214,6 @@ class MaskBaseDataset(Dataset):
     def __len__(self):
         return len(self.image_paths)
 
-    def get_mask_label(self, index) -> MaskLabels:
-        return self.mask_labels[index]
-
-    def get_gender_label(self, index) -> GenderLabels:
-        return self.gender_labels[index]
-
-    def get_age_label(self, index) -> AgeLabels:
-        return self.age_labels[index]
 
     def read_image(self, index):
         image_path = self.image_paths[index]
@@ -339,10 +300,9 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
                     age_label = AgeLabels.from_number(age)
 
                     self.image_paths.append(img_path)
-                    self.mask_labels.append(mask_label)
-                    self.gender_labels.append(gender_label)
-                    self.age_labels.append(age_label)
-
+                    img_label = self.encode_multi_class(mask_label, gender_label, age_label)
+                    self.image_labels.append(img_label)
+                    
                     self.indices[phase].append(cnt)  # phase: train or val, cnt: 
                     cnt += 1
 
@@ -350,120 +310,12 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         return [Subset(self, indices) for phase, indices in self.indices.items()]
 
 
-class MyCustomDataset(MaskBaseDataset):
-    """
-        train / val 나누는 기준을 이미지에 대해서 random 이 아닌
-        사람(profile)을 기준으로 나눕니다.
-        구현은 val_ratio 에 맞게 train / val 나누는 것을 이미지 전체가 아닌 사람(profile)에 대해서 진행하여 indexing 을 합니다
-        이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
-    """
-
-    def __init__(self, data_dir, mean=(0.5, 0.5, 0.5), std=(0.2, 0.2, 0.2), val_ratio=0.2):
-        self.indices = defaultdict(list)  # 키를 지정할 때 값을 주지 않으면, 그 값을 디폴트 값으로 저장(빈 list)
-        super().__init__(data_dir, mean, std, val_ratio)
-
-    @staticmethod
-    def _split_profile(profiles, val_ratio):
-        length = len(profiles)
-        n_val = int(length * val_ratio)
-        train_indices = [i for i in range(length - n_val)]
-        val_indices = [i + len(train_indices) for i in range(n_val)]
-        return {
-            "train": train_indices,
-            "val": val_indices
-        }
-    
-    @staticmethod
-    def _augment_profiles(input_profiles, n_augmentation:int = 1000):
-        
-        indices = list()
-        for profile in input_profiles:
-            if profile.startswith('.'):
-                continue
-            
-            profile_path = profile
-            id, gender, race, age = profile.split('_')
-            gender_num, age_num = GenderLabels.from_str(gender), AgeLabels.from_number(age)
-            indices.append((profile_path, gender, age, gender_num * 3 + age_num))
-
-        profiles = pd.DataFrame(indices, columns=['path', 'gender', 'age', 'class_age_gender'])
-
-        counted_values = profiles.class_age_gender.value_counts()
-        assert counted_values.max() < n_augmentation
-
-        augmented_profiles = profiles.copy()
-        for ag_class in range(len(counted_values)):
-            augment = pd.DataFrame()
-            for i in range((n_augmentation - counted_values[ag_class]) // counted_values[ag_class]):
-                augment = pd.concat([augment, profiles[profiles.class_age_gender == ag_class].copy()])
-            
-            sample_augment = profiles[profiles.class_age_gender == ag_class].sample(n = n_augmentation - len(augment) - counted_values[ag_class])
-            augment = pd.concat([augment, sample_augment])
-            augmented_profiles = pd.concat([augmented_profiles, augment])
-        output = list(augmented_profiles.path)
-        random.shuffle(output)
-
-        return output
-
-    def setup(self):
-        profiles = os.listdir(self.data_dir)
-        profiles = [profile for profile in profiles if not profile.startswith(".")]
-        ## augmentation
-        profiles = self._augment_profiles(profiles, n_augmentation=2000)
-
-        split_profiles = self._split_profile(profiles, self.val_ratio)
-
-        cnt = 0
-        for phase, indices in split_profiles.items():
-            for _idx in indices:
-                profile = profiles[_idx]  # 000004_male_Asian_54
-                img_folder = os.path.join(self.data_dir, profile)  # ~~~/000004_male_Asian_54
-                for file_name in os.listdir(img_folder):
-                    _file_name, ext = os.path.splitext(file_name)  # ('~/c1.txt') -> ('~/c1', .txt)
-                    if _file_name not in self._file_names:  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
-                        continue
-
-                    if file_name.split('.')[0].startswith('incorrect') or file_name.split('.')[0].startswith('normal'):
-                        for i in range(5):
-                            img_path = os.path.join(self.data_dir, profile, file_name)  # (dir, 000004_male_Asian_54, mask1.jpg)
-                            mask_label = self._file_names[_file_name]  # mask_labeling
-
-                            id, gender, race, age = profile.split("_")
-                            gender_label = GenderLabels.from_str(gender)
-                            age_label = AgeLabels.from_number(age)
-
-                            self.image_paths.append(img_path)
-                            self.mask_labels.append(mask_label)
-                            self.gender_labels.append(gender_label)
-                            self.age_labels.append(age_label)
-
-                            self.indices[phase].append(cnt)  # phase: train or val, cnt: 
-                            cnt += 1
-                    else:
-                        img_path = os.path.join(self.data_dir, profile, file_name)  # (dir, 000004_male_Asian_54, mask1.jpg)
-                        mask_label = self._file_names[_file_name]  # mask_labeling
-
-                        id, gender, race, age = profile.split("_")
-                        gender_label = GenderLabels.from_str(gender)
-                        age_label = AgeLabels.from_number(age)
-
-                        self.image_paths.append(img_path)
-                        self.mask_labels.append(mask_label)
-                        self.gender_labels.append(gender_label)
-                        self.age_labels.append(age_label)
-
-                        self.indices[phase].append(cnt)  # phase: train or val, cnt: 
-                        cnt += 1
-
-    def split_dataset(self) -> List[Subset]:
-        return [Subset(self, indices) for phase, indices in self.indices.items()]  
-
-
 class TestDataset(Dataset):
     def __init__(self, img_paths, resize, mean=(0.5, 0.5, 0.5), std=(0.2, 0.2, 0.2)):
         self.img_paths = img_paths
         self.transform = transforms.Compose([
             Resize(resize, Image.BILINEAR),
+            #CenterCrop(resize),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
