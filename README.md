@@ -1,11 +1,11 @@
 # 마스크 착용 상태 분류
-<img src="https://user-images.githubusercontent.com/83912849/157253363-e8d94fee-80ce-4929-b19d-6618c6d7308a.png" width="1200" height="250">
+<img src="https://user-images.githubusercontent.com/83912849/157253363-e8d94fee-80ce-4929-b19d-6618c6d7308a.png" width="1200" height="220">
 
 **'마스크 착용 상태 분류'는 [부스트캠프](https://boostcamp.connect.or.kr/)에서 진행한 Image classification 프로젝트입니다.**
 
   
 ## 프로젝트 개요
-<img src="https://user-images.githubusercontent.com/83912849/157253556-8bd2b548-e3c9-4530-b53b-f4d8bb088e38.jpg" width="850" height="450">
+<img src="https://user-images.githubusercontent.com/83912849/157253556-8bd2b548-e3c9-4530-b53b-f4d8bb088e38.jpg" width="850" height="440">
 <a href="http://www.freepik.com">Designed by pikisuperstar / Freepik</a>    
 
 
@@ -70,4 +70,4 @@ COVID-19의 확산으로 우리나라는 물론 전 세계 사람들은 경제�
 |T3204|조민재|[@binyf](https://github.com/binyf)|[link](https://github.com/boostcampaitech3/level1-image-classification-level1-recsys-15/tree/main/practice/t3204)|
 
 ## Wrap Up Report
-👉 
+👉 [Wrap-Up Report](https://github.com/boostcampaitech3/level1-image-classification-level1-recsys-15/blob/main/practice/Wrap-Up%20Report.PDF)
