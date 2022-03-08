@@ -5,25 +5,30 @@
 - (개인) 나만의 모델링 코드를 구축하고, 다양한 실험 사이클(가설-검증)를 구성한다.
 
 ### 나는 내 목표를 달성하기 위해 무엇을 어떻게 했는가? (타임라인)
-1. **baseline code에 대한 이해 및 EDA**
-2.  **-> [baseline 제출]** resnet18을 fine-tuning하여 학습시킨 모델을 제출하여 이후에 있을 실험에 대한 비교 기준(baseline)을 생성
+1. **baseline code작성 및 EDA**
+2. **데이터 전처리**
+    - 이상치 데이터 제거
+        - 공유받은 train 데이터 전수 조사 결과를 바탕으로 재 레이블링(re-labeling) 및 이상치 데이터 제거
+    - class 간 imbalance 문제를 해결
+        - 데이터 수가 비교적 적은 class 들의 이미지를 복제하고, transform을 적용하여 전체 데이터 셋의 균형을 맞춤.
+3.  **-> [baseline 제출]** resnet18을 fine-tuning하여 학습시킨 모델을 제출하여 이후에 있을 실험에 대한 비교 기준(baseline)을 생성
     - 결과: <accuracy> val: 90% | test: 20%
     - 실패 원인 분석: train/val set을 나눌 때, 동일한 사람의 사진이 각 set에 나눠져서 들어가기 때문에 val에 치팅과 과적합이 있을 것이라고 판단.
-3. **-> [가설: early stopping, train/val set split 구현]** early stopping을 구현하고, 한 사람이 train/val set 중 하나에만 들어가게끔 하면 기존 문제점들을 해결할 수 있을 것이다.
+4. **-> [가설: early stopping, train/val set split 구현]** early stopping을 구현하고, 한 사람이 train/val set 중 하나에만 들어가게끔 하면 기존 문제점들을 해결할 수 있을 것이다.
     - 결과: accuracy 63%의 baseline 모델을 얻게 됨. 
     - 결과 분석: accuracy가 63%인 모델을 얻게 되었으나, train/val의 accuracy 점수가 80%에 임박하는 것에 비해 너무 떨어지는 점수를 얻는다는 것을 발견.
-4. **-> [가설: k-fold cv 구현]** k-fold CV를 통해 좀 더 일반화된 모델 검증을 한다.
+5. **-> [가설: k-fold cv 구현]** k-fold CV를 통해 좀 더 일반화된 모델 검증을 한다.
     - 결과: cv에 대한 결과를 평균내어 좀 더 일반화된 모델 검증을 할 수 있었음
     - 결과 분석: k-fold를 그저 일반화된 모델 검증용도로 만들었으므로, 직접적인 모델 성능 향상은 기대할 수 없었고, 오히려 당장의 실험 속도가 저하되어 학습목표달성에 안 좋게 작용한다고 판단 -> 보류
-5. **-> [가설: 데이터셋 증강]** 1. imbalanced sampler 라이브러리를 사용 / 2. 상대적으로 적은 데이터들을 증강시키어(Copy & Paste) class 비율을 비슷하게 맞추고, 중복되는 데이터에 대해 적절히 transform 시키면 모델 성능이 올라갈 것이다.
+6. **-> [가설: 데이터셋 증강]** 1. imbalanced sampler 라이브러리를 사용 / 2. 상대적으로 적은 데이터들을 증강시키어(Copy & Paste) class 비율을 비슷하게 맞추고, 중복되는 데이터에 대해 적절히 transform 시키면 모델 성능이 올라갈 것이다.
     - 결과: 1. accuracy 65% / 2. accuracy 69%의 모델을 얻게 됨
     - 결과 분석 1: imbalanced sampler 라이브러리는 minor한 클래스는 oversampling을 하지만, major 클래스에 대해서는 undersampling이 적용됨. 이 때문에 큰 성능 향상이 일어나지 않음.
     - 결과 분석 2: 성능은 향상되었지만, 과적합 문제가 발생하였을 수 있다고 판단.
-6. **-> [가설: albumentation, cutmix]** albumentation 라이브러리를 통해  더 다양한 transform을 적용시키고, Cutmix를 구현하면, 일반화 성능이 올라갈 것이다.
+7. **-> [가설: albumentation, cutmix]** albumentation 라이브러리를 통해  더 다양한 transform을 적용시키고, Cutmix를 구현하면, 일반화 성능이 올라갈 것이다.
     - 결과: 성능 개선이 되지 않음
     - 실패 원인 분석: Cutmix가 사람이 아닌 배경 부분에 적용됐을 경우에도 학습을 하기 때문에 오류가 발생할 수 있음  
 -> 제대로 된 원인 분석을 하지 않고, 다음 실험을 진행
-7. **-> [가설: ensemble, nni]** 팀원이 Age, Gender, Mask별로 따로 모델을 구현하여 ensemble 하는 것을 보고 따라함과 동시에 nni를 통해 하이퍼파라미터 서칭을 진행
+8. **-> [가설: ensemble, nni]** 팀원이 Age, Gender, Mask별로 따로 모델을 구현하여 ensemble 하는 것을 보고 따라함과 동시에 nni를 통해 하이퍼파라미터 서칭을 진행
     - 결과: 성능 개선이 되지 않음
     - 실패 원인 분석: 이전 가설에 대한 실패 원인 분석과 피드백을 정확히 하지 않아, Cutmix에서 동일한 오류가 발생했다고 판단됨
   
