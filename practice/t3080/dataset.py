@@ -9,9 +9,11 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter,RandomHorizontalFlip,RandomRotation,RandomGrayscale,GaussianBlur
+import albumentations as A
 
 from collections import Counter
 from tqdm import tqdm
+
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -27,10 +29,6 @@ class BaseAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = Compose([
             Resize(resize, Image.BILINEAR),
-            RandomHorizontalFlip(0.5),
-            RandomGrayscale(0.4),
-            RandomRotation(30),
-            GaussianBlur(),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
@@ -59,16 +57,31 @@ class AddGaussianNoise(object):
 class CustomAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = Compose([
-            CenterCrop((320, 256)),
             Resize(resize, Image.BILINEAR),
+            CenterCrop((180,180)),
             RandomHorizontalFlip(0.5),
-            RandomGrayscale(0.4),
-            RandomRotation(30),
+            ColorJitter(brightness=(0.2,0.7)),
+            RandomRotation(70),
             ColorJitter(0.1, 0.1, 0.1, 0.1),
             ToTensor(),
             Normalize(mean=mean, std=std),
-            AddGaussianNoise()
         ])
+        # self.transform = {'train':Compose([
+        #     Resize(resize, Image.BILINEAR),
+        #     CenterCrop((180,180)),
+        #     RandomHorizontalFlip(0.5),
+        #     ColorJitter(brightness=(0.2,0.7)),
+        #     RandomRotation(70),
+        #     ColorJitter(0.1, 0.1, 0.1, 0.1),
+        #     ToTensor(),
+        #     Normalize(mean=mean, std=std),
+        # ]),
+        # 'val':Compose([
+        #     Resize(resize, Image.BILINEAR),
+        #     # CenterCrop((180,180)),
+        #     ToTensor(),
+        #     Normalize(mean=mean, std=std),
+        # ])}
 
     def __call__(self, image):
         return self.transform(image)
@@ -238,10 +251,11 @@ class MaskBaseDataset(Dataset):
         torch.utils.data.Subset 클래스 둘로 나눕니다.
         구현이 어렵지 않으니 구글링 혹은 IDE (e.g. pycharm) 의 navigation 기능을 통해 코드를 한 번 읽어보는 것을 추천드립니다^^
         """
+
         n_val = int(len(self) * self.val_ratio)
         n_train = len(self) - n_val
         train_set, val_set = random_split(self, [n_train, n_val])
-        print(train_set)
+        
         return train_set, val_set
 
 class MaskSplitByProfileDataset(MaskBaseDataset):
